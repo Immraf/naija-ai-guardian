@@ -50,6 +50,8 @@ export interface SafetyTip {
 }
 
 export type TabId =
+  | 'landing'
+  | 'portal'
   | 'home'
   | 'analyzer'
   | 'database'

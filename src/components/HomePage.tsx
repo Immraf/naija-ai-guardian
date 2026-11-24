@@ -100,8 +100,8 @@ export default function HomePage() {
   useEffect(() => { loadStats(); loadRecentReports() }, [])
 
   async function loadStats() {
-    const { data, error } = await supabase.from('scam_reports').select('status, risk_level')
-    if (error) { toast.error(error.message); return }
+    const { data, error } = await supabase.from('public_scam_reports').select('status, risk_level')
+    if (error) { toast.error('Community stats are unavailable right now.'); return }
     setStats({
       total: data?.length || 0,
       confirmed: data?.filter(r => r.status === 'Confirmed' || r.risk_level === 'Confirmed Scam').length || 0,
@@ -111,9 +111,22 @@ export default function HomePage() {
   }
 
   async function loadRecentReports() {
-    const { data, error } = await supabase.from('scam_reports').select('*').order('created_at', { ascending: false }).limit(5)
-    if (error) { toast.error(error.message); return }
-    setRecentReports((data || []) as ScamReport[])
+    const { data, error } = await supabase
+      .from('public_scam_reports')
+      .select('id, reference_id, category, platform, status, risk_level, identifier, description, view_count, created_at')
+      .order('created_at', { ascending: false })
+      .limit(5)
+    if (error) { toast.error('Recent reports could not be loaded.'); return }
+    setRecentReports(
+      (data ?? []).map((row) => ({
+        ...row,
+        evidence: null,
+        reporter_name: null,
+        reporter_email: null,
+        duplicate_of: null,
+        updated_at: row.created_at,
+      })) as unknown as ScamReport[],
+    )
   }
 
   function handleQuickAnalyze() {

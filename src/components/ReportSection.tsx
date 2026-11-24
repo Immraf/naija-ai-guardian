@@ -7,7 +7,7 @@ import {
 } from '@phosphor-icons/react'
 import { supabase } from '@/integrations/supabase/client'
 import { cn } from '@/lib/utils'
-import { generateReferenceId, normalizePhoneNumber } from '@/utils/scamUtils'
+import { normalizePhoneNumber } from '@/utils/scamUtils'
 import { SCAM_TYPES, PLATFORMS } from '@/constants'
 import type { TabId, ReportFormData } from '@/types'
 
@@ -38,26 +38,31 @@ export default function ReportSection({ onTabChange }: { onTabChange: (t: TabId)
 
   async function handleSubmit() {
     setSubmitting(true)
-    const refId = generateReferenceId()
     try {
-      const { error } = await supabase.from('scam_reports').insert({
-        reference_id: refId,
-        category: form.scamType,
-        identifier: normalizePhoneNumber(form.phoneNumber),
-        platform: form.platform,
-        description: form.description,
-        evidence: form.evidence || null,
-        reporter_name: form.reporterName || null,
-        reporter_email: form.reporterEmail || null,
-        status: 'Reported',
-        risk_level: 'Suspicious',
+      // Reports are written by the submit-report edge function, never directly
+      // from the browser, so the base table needs no anonymous insert policy.
+      const { data, error } = await supabase.functions.invoke('submit-report', {
+        body: {
+          category: form.scamType,
+          identifier: normalizePhoneNumber(form.phoneNumber),
+          platform: form.platform,
+          description: form.description,
+          evidence: form.evidence,
+          reporter_name: form.reporterName,
+          reporter_email: form.reporterEmail,
+        },
       })
       if (error) throw error
-      setReferenceId(refId)
+      const payload = data as { reference_id?: string; error?: string } | null
+      if (!payload?.reference_id) {
+        throw new Error(payload?.error || 'Failed to submit report.')
+      }
+      setReferenceId(payload.reference_id)
       setStep(3)
       toast.success('Report submitted successfully!')
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to submit report.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to submit report.'
+      toast.error(message)
     } finally {
       setSubmitting(false)
     }

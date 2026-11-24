@@ -1,120 +1,251 @@
-import { useState, useEffect } from 'react'
-import { Toaster } from 'sonner'
-import { Shield, SignOut } from '@phosphor-icons/react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Toaster, toast } from 'sonner'
+import { Shield } from '@phosphor-icons/react'
+import { AuthProvider, useAuth } from '@/auth/AuthProvider'
 import Navbar from '@/components/Navbar'
 import MainContent from '@/components/MainContent'
-import { supabase } from '@/integrations/supabase/client'
-import type { TabId, AdminProfile, AdminRole, AdminStatus } from '@/types'
+import LandingPage from '@/components/LandingPage'
+import StaffLogin from '@/components/StaffLogin'
+import ErrorBoundary from '@/components/ErrorBoundary'
+import { STAFF_ROUTE } from '@/constants'
+import { IDLE_LIMIT_MS, IDLE_WARNING_MS, fetchAdminProfile } from '@/lib/staffAuth'
+import type { TabId, AdminProfile } from '@/types'
+
+/** Every portal tab owns a hash route so a refresh or a shared link reopens it. */
+const TAB_ROUTES: Partial<Record<TabId, string>> = {
+  home: '#/dashboard',
+  analyzer: '#/analyzer',
+  database: '#/database',
+  report: '#/report',
+  awareness: '#/awareness',
+  quiz: '#/quiz',
+  safety: '#/safety',
+  admin: '#/admin',
+  portal: STAFF_ROUTE,
+}
+
+function tabFromHash(hash: string): TabId {
+  if (hash === STAFF_ROUTE) return 'portal'
+  const match = Object.entries(TAB_ROUTES).find(([, route]) => route === hash)
+  return (match?.[0] as TabId | undefined) ?? 'landing'
+}
+
+function initialTab(): TabId {
+  if (typeof window === 'undefined') return 'landing'
+  return tabFromHash(window.location.hash)
+}
 
 export default function App() {
-  const [isDark, setIsDark] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('scamshield-theme')
-      if (saved) return saved === 'dark'
-      return window.matchMedia('(prefers-color-scheme: dark)').matches
-    }
-    return false
-  })
-  const [activeTab, setActiveTab] = useState<TabId>('home')
-  const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
-  const [sessionLoading, setSessionLoading] = useState(true)
+  return (
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
+  )
+}
 
+function AppShell() {
+  const { user, loading, signOut } = useAuth()
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === 'undefined') return false
+    const saved = localStorage.getItem('scamshield-theme')
+    if (saved) return saved === 'dark'
+    return window.matchMedia('(prefers-color-scheme: dark)').matches
+  })
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab)
+  const [adminProfile, setAdminProfile] = useState<AdminProfile | null>(null)
+  const [profileLoading, setProfileLoading] = useState(false)
+  const warningShown = useRef(false)
+
+  /* ------------------------------------------------------------- theming */
   useEffect(() => {
     document.documentElement.classList.toggle('dark', isDark)
     localStorage.setItem('scamshield-theme', isDark ? 'dark' : 'light')
   }, [isDark])
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        loadAdminProfile(session.user.id)
-      } else {
-        setSessionLoading(false)
-      }
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        loadAdminProfile(session.user.id)
-      } else {
-        setAdminProfile(null)
-        setSessionLoading(false)
-      }
-    })
-
-    return () => subscription.unsubscribe()
+  /* ------------------------------------------------- URL <-> tab plumbing */
+  const navigate = useCallback((tab: TabId) => {
+    setActiveTab(tab)
+    if (typeof window === 'undefined') return
+    const base = `${window.location.pathname}${window.location.search}`
+    const next = `${base}${TAB_ROUTES[tab] ?? ''}`
+    if (`${base}${window.location.hash}` !== next) {
+      window.history.pushState(null, '', next)
+    }
   }, [])
 
-  async function loadAdminProfile(userId: string) {
-    const { data, error } = await supabase
-      .from('admin_profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-    if (!error && data) {
-      setAdminProfile({
-        id: data.id,
-        full_name: data.full_name,
-        email: data.email,
-        role: data.role as AdminRole,
-        status: data.status as AdminStatus,
-        permissions: data.permissions || [],
-        created_at: data.created_at,
-        last_login: data.last_login,
-      })
-    } else {
-      setAdminProfile(null)
+  useEffect(() => {
+    const sync = () => {
+      const hash = window.location.hash
+      // In-page anchors (#main-content, #features) must never change the tab.
+      if (hash && hash !== STAFF_ROUTE && !hash.startsWith('#/')) return
+      setActiveTab(tabFromHash(hash))
     }
-    setSessionLoading(false)
-  }
+    window.addEventListener('hashchange', sync)
+    window.addEventListener('popstate', sync)
+    return () => {
+      window.removeEventListener('hashchange', sync)
+      window.removeEventListener('popstate', sync)
+    }
+  }, [])
 
-  function handleAdminLogin(profile: AdminProfile) {
-    setAdminProfile(profile)
-    setActiveTab('admin')
-  }
+  /* --------------------------------------- hidden portal hash + noindex */
+  useEffect(() => {
+    const existing = document.querySelector('meta[name="robots"]')
+    if (activeTab !== 'portal') {
+      if (existing) existing.remove()
+      return
+    }
+    const meta = existing ?? document.createElement('meta')
+    meta.setAttribute('name', 'robots')
+    meta.setAttribute('content', 'noindex, nofollow')
+    if (!existing) document.head.appendChild(meta)
+  }, [activeTab])
 
-  async function handleAdminLogout() {
-    await supabase.auth.signOut()
+  /* --------------------------------------- staff profile for signed-in user */
+  useEffect(() => {
+    if (!user) {
+      setAdminProfile(null)
+      setProfileLoading(false)
+      return
+    }
+    let cancelled = false
+    setProfileLoading(true)
+    fetchAdminProfile(user.id)
+      .then((profile) => {
+        if (cancelled) return
+        setAdminProfile(profile && profile.status === 'ACTIVE' ? profile : null)
+        setProfileLoading(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setAdminProfile(null)
+        setProfileLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [user])
+
+  const handleAdminLogout = useCallback(async () => {
+    await signOut()
     setAdminProfile(null)
-    setActiveTab('home')
-  }
+    navigate('landing')
+  }, [navigate, signOut])
+
+  const handleAdminLogin = useCallback(
+    (profile: AdminProfile) => {
+      setAdminProfile(profile)
+      navigate('admin')
+    },
+    [navigate],
+  )
+
+  /* ------------------------------------------- idle auto sign-out (30m) */
+  useEffect(() => {
+    if (!adminProfile) return
+
+    let warning: number | undefined
+    let limit: number | undefined
+
+    const clear = () => {
+      if (warning) window.clearTimeout(warning)
+      if (limit) window.clearTimeout(limit)
+    }
+
+    const start = () => {
+      clear()
+      warningShown.current = false
+      warning = window.setTimeout(() => {
+        warningShown.current = true
+        toast.warning('Still there? Staff sessions sign out after 30 minutes of inactivity.')
+      }, IDLE_WARNING_MS)
+      limit = window.setTimeout(() => {
+        void handleAdminLogout()
+        toast.info('Signed out after 30 minutes of inactivity.')
+      }, IDLE_LIMIT_MS)
+    }
+
+    const activity = ['mousemove', 'keydown', 'pointerdown', 'scroll', 'touchstart']
+    let last = 0
+    const onActivity = () => {
+      const now = Date.now()
+      if (now - last < 5000) return
+      last = now
+      start()
+    }
+
+    start()
+    activity.forEach((event) => window.addEventListener(event, onActivity, { passive: true }))
+    return () => {
+      clear()
+      activity.forEach((event) => window.removeEventListener(event, onActivity))
+    }
+  }, [adminProfile, handleAdminLogout])
+
+  const isPortal = activeTab === 'portal'
+  const sessionLoading = loading || profileLoading
 
   return (
-    <div className="min-h-screen bg-[#F7F8F6] text-[#111827] dark:bg-[#0F172A] dark:text-white">
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          className: 'dark:bg-[#111827] dark:text-white dark:border-gray-700',
-        }}
-      />
-      <Navbar
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
-        isDark={isDark}
-        onToggleDark={() => setIsDark(!isDark)}
-        adminProfile={adminProfile}
-        onAdminLogout={handleAdminLogout}
-      />
-      <main>
-        <MainContent
+    <div className="min-h-screen bg-background text-foreground">
+      <a
+        href="#main-content"
+        className="sr-only-focusable focus-ring absolute left-4 top-4 z-[60] rounded-lg bg-card px-4 py-2 text-sm font-semibold text-primary shadow-lg"
+      >
+        Skip to main content
+      </a>
+
+      <Toaster position="bottom-right" closeButton />
+
+      {!isPortal && (
+        <Navbar
           activeTab={activeTab}
-          onTabChange={setActiveTab}
+          onTabChange={navigate}
+          isDark={isDark}
+          onToggleDark={() => setIsDark((value) => !value)}
           adminProfile={adminProfile}
-          onAdminLogin={handleAdminLogin}
           onAdminLogout={handleAdminLogout}
         />
+      )}
+
+      <main id="main-content" tabIndex={-1}>
+        <ErrorBoundary>
+          {activeTab === 'landing' ? (
+            <LandingPage onTabChange={navigate} />
+          ) : isPortal ? (
+            <StaffLogin onLogin={handleAdminLogin} onExit={() => navigate('landing')} />
+          ) : sessionLoading && activeTab === 'admin' ? (
+            <div className="flex min-h-[60vh] items-center justify-center">
+              <div
+                className="h-8 w-8 animate-spin rounded-full border-4 border-border border-t-primary"
+                role="status"
+                aria-label="Restoring your session"
+              />
+            </div>
+          ) : (
+            <MainContent
+              activeTab={activeTab}
+              onTabChange={navigate}
+              adminProfile={adminProfile}
+              onAdminLogin={handleAdminLogin}
+              onAdminLogout={handleAdminLogout}
+            />
+          )}
+        </ErrorBoundary>
       </main>
-      <footer className="border-t border-[#E5E7EB] bg-white dark:border-gray-800 dark:bg-[#111827]">
-        <div className="mx-auto flex max-w-7xl flex-col items-center gap-2 px-4 py-6 text-center sm:flex-row sm:justify-between sm:py-4">
-          <div className="flex items-center gap-2 text-sm text-[#667085] dark:text-gray-400">
-            <Shield weight="fill" className="h-4 w-4 text-[#00796B]" />
-            <span>ScamShield Nigeria &mdash; Stay One Step Ahead of Scammers.</span>
+
+      {!isPortal && (
+        <footer className="border-t border-border bg-card">
+          <div className="mx-auto flex max-w-7xl flex-col items-center gap-3 px-5 py-8 text-center sm:flex-row sm:justify-between sm:px-8 sm:py-6 sm:text-left">
+            <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+              <Shield weight="fill" className="h-4 w-4 text-primary" aria-hidden="true" />
+              <span>ScamShield Nigeria — Stay One Step Ahead of Scammers.</span>
+            </div>
+            <p className="max-w-sm text-[13px] leading-relaxed text-muted-foreground">
+              Report scams to the EFCC or forward suspicious SMS to 7726, free from all networks.
+            </p>
           </div>
-          <p className="text-xs text-[#667085] dark:text-gray-500">
-            Report scams to EFCC or forward suspicious SMS to 7726 (free from all networks).
-          </p>
-        </div>
-      </footer>
+        </footer>
+      )}
     </div>
   )
 }

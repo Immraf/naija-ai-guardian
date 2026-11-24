@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import { UserPlus, Users, DotsThree } from '@phosphor-icons/react'
 import { supabase } from '@/integrations/supabase/client'
 import { cn } from '@/lib/utils'
-import type { AdminProfile, AdminRole } from '@/types'
+import type { AdminProfile } from '@/types'
 
 const PERMISSION_OPTIONS = [
   { key: 'view_reports', label: 'View Reports' },
@@ -133,7 +133,7 @@ export default function AdminAdministrators({
 }) {
   const [confirmAction, setConfirmAction] = useState<{ id: string; action: 'enable' | 'disable' } | null>(null)
   const [showAdd, setShowAdd] = useState(false)
-  const [newEmail, setNewEmail] = useState('')
+  const [newUsername, setNewUsername] = useState('')
   const [newName, setNewName] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [adding, setAdding] = useState(false)
@@ -153,37 +153,36 @@ export default function AdminAdministrators({
 
   async function handleAddSubAdmin(e: React.FormEvent) {
     e.preventDefault()
-    if (!newEmail.trim() || !newName.trim() || !newPassword.trim()) {
+    if (!newUsername.trim() || !newName.trim() || !newPassword.trim()) {
       toast.error('Please fill in all fields')
       return
     }
     setAdding(true)
     try {
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email: newEmail.trim(),
-        password: newPassword,
+      // The create-admin edge function verifies that this caller is an ACTIVE
+      // super admin, then provisions the auth user with the service role.
+      const { data, error } = await supabase.functions.invoke('create-admin', {
+        body: {
+          username: newUsername.trim(),
+          full_name: newName.trim(),
+          password: newPassword,
+          permissions: selectedPerms,
+        },
       })
-      if (signUpError || !authData.user) throw new Error(signUpError?.message || 'Failed to create user')
-
-      const { error: profileError } = await supabase.from('admin_profiles').insert({
-        id: authData.user.id,
-        full_name: newName.trim(),
-        email: newEmail.trim(),
-        role: 'SUB_ADMIN' as AdminRole,
-        status: 'ACTIVE',
-        permissions: selectedPerms,
-      })
-      if (profileError) throw new Error(profileError.message)
+      if (error) throw error
+      const payload = data as { username?: string; error?: string } | null
+      if (!payload?.username) throw new Error(payload?.error || 'Failed to create admin')
 
       toast.success('Sub-Admin created successfully')
-      setNewEmail('')
+      setNewUsername('')
       setNewName('')
       setNewPassword('')
       setSelectedPerms(['view_reports'])
       setShowAdd(false)
       onRefresh()
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to create admin')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to create admin'
+      toast.error(message)
     } finally {
       setAdding(false)
     }
@@ -206,11 +205,11 @@ export default function AdminAdministrators({
   return (
     <div role="region" aria-label="Administrator accounts management" className="space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold text-[#111827] dark:text-white">Administrator Accounts</h2>
+        <h2 className="text-sm font-bold text-foreground">Administrator Accounts</h2>
         <button
           onClick={() => setShowAdd(!showAdd)}
           aria-label={showAdd ? 'Cancel adding sub-admin' : 'Add sub-admin'}
-          className="flex items-center gap-1.5 rounded-lg bg-[#00796B] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#00695C] focus-ring active:scale-[0.98] transition-all"
+          className="flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus-ring active:scale-[0.98] transition-all"
         >
           <UserPlus className="h-3.5 w-3.5" aria-hidden="true" /> Add Sub-Admin
         </button>
@@ -222,33 +221,35 @@ export default function AdminAdministrators({
           animate={{ opacity: 1, y: 0 }}
           onSubmit={handleAddSubAdmin}
           aria-label="Add new sub-administrator form"
-          className="rounded-xl border border-[#E5E7EB] bg-white p-4 dark:border-gray-700 dark:bg-[#111827] space-y-3"
+          className="rounded-xl border border-border bg-card p-4 space-y-3"
         >
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <label htmlFor="new-admin-name" className="mb-1 block text-[10px] font-medium text-[#667085] uppercase">Full Name</label>
+              <label htmlFor="new-admin-name" className="mb-1 block text-[10px] font-medium text-muted-foreground uppercase">Full Name</label>
               <input id="new-admin-name" value={newName} onChange={(e) => setNewName(e.target.value)}
                 placeholder="e.g. Chidi Okafor"
                 autoComplete="name"
-                className="w-full rounded-lg border border-[#E5E7EB] bg-[#F7F8F6] px-3 py-2 text-xs text-[#111827] outline-none focus:border-[#00796B] focus-ring dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-primary focus-ring" />
             </div>
             <div>
-              <label htmlFor="new-admin-email" className="mb-1 block text-[10px] font-medium text-[#667085] uppercase">Email</label>
-              <input id="new-admin-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)}
-                placeholder="admin@example.com"
-                autoComplete="email"
-                className="w-full rounded-lg border border-[#E5E7EB] bg-[#F7F8F6] px-3 py-2 text-xs text-[#111827] outline-none focus:border-[#00796B] focus-ring dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
+              <label htmlFor="new-admin-username" className="mb-1 block text-[10px] font-medium text-muted-foreground uppercase">Username</label>
+              <input id="new-admin-username" type="text" value={newUsername} onChange={(e) => setNewUsername(e.target.value.toLowerCase())}
+                placeholder="e.g. chidi.okafor"
+                autoComplete="off"
+                aria-describedby="new-admin-username-hint"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-primary focus-ring" />
+              <p id="new-admin-username-hint" className="mt-1 text-[10px] text-muted-foreground">Signs in at the staff portal. No email address needed.</p>
             </div>
             <div>
-              <label htmlFor="new-admin-password" className="mb-1 block text-[10px] font-medium text-[#667085] uppercase">Temp Password</label>
+              <label htmlFor="new-admin-password" className="mb-1 block text-[10px] font-medium text-muted-foreground uppercase">Temp Password</label>
               <input id="new-admin-password" type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Set initial password"
+                placeholder="At least 10 characters"
                 autoComplete="new-password"
-                className="w-full rounded-lg border border-[#E5E7EB] bg-[#F7F8F6] px-3 py-2 text-xs text-[#111827] outline-none focus:border-[#00796B] focus-ring dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-xs text-foreground outline-none focus:border-primary focus-ring" />
             </div>
           </div>
           <div role="group" aria-label="Select permissions for new admin">
-            <p className="mb-2 text-[10px] font-medium text-[#667085] uppercase">Permissions</p>
+            <p className="mb-2 text-[10px] font-medium text-muted-foreground uppercase">Permissions</p>
             <div className="flex flex-wrap gap-2">
               {PERMISSION_OPTIONS.map((p) => (
                 <button key={p.key} type="button" onClick={() => togglePerm(p.key)}
@@ -256,8 +257,8 @@ export default function AdminAdministrators({
                   className={cn(
                     'rounded-lg border px-2.5 py-1 text-[10px] font-medium transition-all focus-ring',
                     selectedPerms.includes(p.key)
-                      ? 'border-[#00796B] bg-[#00796B]/10 text-[#00796B]'
-                      : 'border-[#E5E7EB] text-[#667085] hover:border-[#00796B]/30 dark:border-gray-600'
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border text-muted-foreground hover:border-primary/30'
                   )}
                 >{p.label}</button>
               ))}
@@ -265,9 +266,9 @@ export default function AdminAdministrators({
           </div>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setShowAdd(false)}
-              className="rounded-lg border border-[#E5E7EB] px-3 py-1.5 text-xs font-medium text-[#667085] focus-ring dark:border-gray-600">Cancel</button>
+              className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground focus-ring">Cancel</button>
             <button type="submit" disabled={adding}
-              className="flex items-center gap-1 rounded-lg bg-[#00796B] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#00695C] focus-ring disabled:opacity-50">
+              className="flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 focus-ring disabled:opacity-50">
               {adding ? 'Creating...' : <><UserPlus className="h-3.5 w-3.5" aria-hidden="true" /> Create Admin</>}
             </button>
           </div>
@@ -275,9 +276,9 @@ export default function AdminAdministrators({
       )}
 
       {admins.length === 0 ? (
-        <div role="status" className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#E5E7EB] py-12 dark:border-gray-700">
-          <Users className="mb-2 h-8 w-8 text-[#667085]" aria-hidden="true" />
-          <p className="text-xs font-medium text-[#667085]">No administrators found</p>
+        <div role="status" className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border py-12">
+          <Users className="mb-2 h-8 w-8 text-muted-foreground" aria-hidden="true" />
+          <p className="text-xs font-medium text-muted-foreground">No administrators found</p>
         </div>
       ) : (
         <div className="space-y-2">

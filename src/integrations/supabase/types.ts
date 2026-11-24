@@ -185,10 +185,27 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_scam_reports: {
+        Row: {
+          category: string
+          created_at: string
+          description: string
+          id: string
+          identifier: string
+          platform: string
+          reference_id: string | null
+          risk_level: string | null
+          status: string
+          view_count: number
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      touch_last_login: {
+        Args: Record<string, never>
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

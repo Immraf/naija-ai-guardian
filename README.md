@@ -1,120 +1,101 @@
-# React + Vite + shadcn/ui Starter Template
+# ScamShield Nigeria
 
-A modern React starter template built with Vite, TypeScript, Tailwind CSS, and shadcn/ui components.
+Public scam-checking platform for Nigeria: analyze suspicious messages, search
+reported identifiers, and file a report that warns the next person. A hidden,
+staff-only console lets moderators triage reports, manage scam intelligence and
+provision accounts.
 
-## 🚀 Features
+Built with Vite + React + TypeScript + Tailwind CSS, backed by Supabase
+(Postgres + Row Level Security + Auth + Edge Functions).
 
-- ⚡️ **Vite** - Fast build tool and development server
-- ⚛️ **React 18** - Latest React with hooks support
-- 🎯 **TypeScript** - Type safety and better developer experience
-- 🎨 **Tailwind CSS** - Utility-first CSS framework
-- 🧩 **shadcn/ui** - Beautifully designed components built with Radix UI
-- 📦 **Path Mapping** - Clean imports with `@/` prefix
+---
 
-## 📦 Included shadcn/ui Components
+## 1. Local setup
 
-- Button
-- Card
-- Input
-- Label
-- Badge
-- Dialog
-- And more...
+```bash
+bun install
+cp .env.example .env.local   # then fill in the two values below
+bun run dev
+```
 
-## 🛠️ Getting Started
+| Variable | Where it is used | Exposure |
+| --- | --- | --- |
+| `VITE_SUPABASE_URL` | Supabase client (browser) | public |
+| `VITE_SUPABASE_ANON_KEY` | Supabase client (browser) | public (RLS enforced) |
 
-1. **Install dependencies**
+Never put the service-role key in a `VITE_` variable — anything prefixed
+`VITE_` is bundled into the browser build.
 
-   ```bash
-   npm install
-   ```
+## 2. Database
 
-2. **Start development server**
+Migrations live in `supabase/migrations/` and are applied in filename order.
 
-   ```bash
-   npm run dev
-   ```
+1. `*_create_admin_profiles_and_audit_logs.sql` — staff profiles + audit trail.
+2. `*_public_view_rls_lockdown.sql` — creates the `public_scam_reports`
+   security-definer view, the `touch_last_login()` RPC, and removes every
+   anonymous policy from the base tables.
 
-3. **Build for production**
+Public visitors can only read the masked `public_scam_reports` view. Direct
+table access is limited to ACTIVE staff, gated by `auth.uid()` and
+`admin_profiles`. Apply with:
 
-   ```bash
-   npm run build
-   ```
+```bash
+supabase db push          # or apply the SQL from the Supabase dashboard
+```
 
-4. **Preview production build**
-   ```bash
-   npm run preview
-   ```
+## 3. Edge functions
 
-## 📁 Project Structure
+```bash
+supabase functions deploy submit-report
+supabase functions deploy create-admin
+```
+
+- `submit-report` — public write path. Validates and normalizes the payload,
+  rate-limits per IP, inserts with the service role and returns a
+  `reference_id`. No client ever inserts into `scam_reports`.
+- `create-admin` — verifies the caller's JWT belongs to an ACTIVE
+  `SUPER_ADMIN`, then creates the auth user (`<username>@portal.scamshield.local`),
+  writes the `admin_profiles` row and appends an `audit_logs` entry.
+
+## 4. Seeding the first super admin
+
+Staff accounts are never created from the client. Bootstrap one with:
+
+```bash
+SUPABASE_URL=... \
+SUPABASE_SERVICE_ROLE_KEY=... \
+SEED_ADMIN_USERNAME=owner \
+SEED_ADMIN_PASSWORD='a-long-unique-password' \
+bun run scripts/seed-admins.ts
+```
+
+The script is idempotent: it re-uses an existing auth user and only repairs the
+profile row. Rotate the password from the Supabase dashboard afterwards.
+
+## 5. Staff portal
+
+The console is not linked from the public site. Open `/#/staff-access`, sign in
+with the username and password issued by a super admin, and you are dropped into
+the moderation dashboard. Sessions sign out automatically after 30 minutes of
+inactivity, and the portal route is marked `noindex, nofollow`.
+
+## 6. Project layout
 
 ```
 src/
-├── components/
-│   └── ui/              # shadcn/ui components
-├── lib/
-│   └── utils.ts         # Utility functions
-├── App.tsx              # Main application component
-├── index.css            # Global styles with Tailwind
-└── main.tsx             # Application entry point
+  components/        marketing + dashboard sections, staff console
+  auth/              session/profile provider (Supabase Auth + admin_profiles)
+  lib/staffAuth.ts   staff login helpers (username -> synthetic mailbox)
+  integrations/      Supabase client and generated types
+supabase/
+  migrations/        schema + RLS
+  functions/         submit-report, create-admin
+scripts/seed-admins.ts
 ```
 
-## 🎨 Customization
+## 7. Brand tokens
 
-### Adding New shadcn/ui Components
-
-This template is pre-configured with shadcn/ui. You can add more components by creating them in the `src/components/ui/` directory.
-
-### Tailwind Configuration
-
-The Tailwind configuration is set up with shadcn/ui color variables. You can customize colors and other design tokens in:
-
-- `tailwind.config.js` - Tailwind configuration
-- `src/index.css` - CSS custom properties for themes
-
-### TypeScript Configuration
-
-Path mapping is configured for clean imports:
-
-```typescript
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-```
-
-## 🌗 Dark Mode
-
-The template includes dark mode support through Tailwind's `dark:` classes and CSS custom properties.
-
-## 📚 Learn More
-
-- [Vite Documentation](https://vitejs.dev/)
-- [React Documentation](https://react.dev/)
-- [Tailwind CSS](https://tailwindcss.com/)
-- [shadcn/ui](https://ui.shadcn.com/)
-- [Radix UI](https://www.radix-ui.com/)
-
-## 🤝 Contributing
-
-Feel free to submit issues and enhancement requests!
-
-**⚡ Powered by [Dala](https://dala.gebeya.com)** - The AI-powered web development platform that helps you build full-stack applications faster.
-
----
-
-## 🤖 What is Dala?
-
-**[Gebeya Dala](https://dala.gebeya.com)** is an intelligent web development platform that accelerates your React development workflow. Build, preview, and deploy web applications, and instant development environments.
-
-🔗 **Try Dala:** [dala.gebeya.com](https://dala.gebeya.com)
-
-### Why Use Dala?
-
-- **AI-Powered Development** - Get intelligent code suggestions and automated component generation
-- **Instant Preview** - See your changes live in real-time sandbox environments
-- **Zero Setup** - No local environment configuration needed
-- **Collaborative** - Build and share projects with your team
-- **Deployment Ready** - One-click deployment to production
-
----
-
-Built with ❤️ by the Dala team to help developers build faster and smarter.
+Colours and radii are CSS variables in `src/index.css` (`:root` and `.dark`);
+components consume them through Tailwind utilities (`bg-background`,
+`text-foreground`, `bg-primary`, `border-border`, …). Change the palette there,
+not in individual components.

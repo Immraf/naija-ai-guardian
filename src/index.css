@@ -3,25 +3,29 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(1 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  /* ScamShield brand palette — canvas, ink, teal accent */
+  --background: #f7f8f6;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  --primary: #00796b;
+  --primary-foreground: #ffffff;
+  --secondary: #e6f2f0;
+  --secondary-foreground: #00695c;
+  --muted: #eef1ef;
+  --muted-foreground: #667085;
+  --accent: #e6f2f0;
+  --accent-foreground: #00695c;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
+  --ring: #00796b;
+  --success: #10b981;
+  --warning: #f59e0b;
+  --info: #3b82f6;
   --chart-1: oklch(0.81 0.1 252);
   --chart-2: oklch(0.62 0.19 260);
   --chart-3: oklch(0.55 0.22 263);
@@ -67,25 +71,29 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.269 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.275 0 0);
-  --input: oklch(0.325 0 0);
-  --ring: oklch(0.556 0 0);
+  /* Deliberate elevation scale: canvas darkest, card +1, popover +2 */
+  --background: #0b1220;
+  --foreground: #f8fafc;
+  --card: #111827;
+  --card-foreground: #f8fafc;
+  --popover: #172033;
+  --popover-foreground: #f8fafc;
+  --primary: #0e9384;
+  --primary-foreground: #ffffff;
+  --secondary: #1e293b;
+  --secondary-foreground: #f8fafc;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --accent: #1e293b;
+  --accent-foreground: #f8fafc;
+  --destructive: #f87171;
+  --destructive-foreground: #0b1220;
+  --border: #1f2937;
+  --input: #243044;
+  --ring: #2dd4bf;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --info: #60a5fa;
   --chart-1: oklch(0.81 0.1 252);
   --chart-2: oklch(0.62 0.19 260);
   --chart-3: oklch(0.55 0.22 263);
@@ -148,6 +156,9 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -185,7 +196,7 @@
     @apply border-border outline-ring/50;
   }
   *:focus-visible {
-    @apply outline-2 outline-offset-2 outline-[#00796B];
+    @apply outline-2 outline-offset-2 outline-primary;
   }
   body {
     @apply bg-background text-foreground;
@@ -217,18 +228,51 @@
     border-width: 0;
   }
   .focus-ring {
-    @apply focus-visible:ring-2 focus-visible:ring-[#00796B] focus-visible:ring-offset-2 focus-visible:outline-none;
+    @apply focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none;
   }
   .focus-ring-white {
-    @apply focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#00796B] focus-visible:outline-none;
+    @apply focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-primary focus-visible:outline-none;
   }
   .risk-dot-high {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/20;
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[13px] font-medium text-red-700 bg-red-50 dark:text-red-400 dark:bg-red-900/20;
   }
   .risk-dot-medium {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/20;
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[13px] font-medium text-amber-700 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/20;
   }
   .risk-dot-low {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/20;
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[13px] font-medium text-emerald-700 bg-emerald-50 dark:text-emerald-400 dark:bg-emerald-900/20;
+  }
+  .kenburns {
+    animation: kenburns 28s ease-in-out infinite alternate;
+  }
+}
+
+@keyframes kenburns {
+  from {
+    transform: scale(1.02);
+  }
+  to {
+    transform: scale(1.12);
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .kenburns {
+    animation: none !important;
+    transform: none !important;
   }
 }
