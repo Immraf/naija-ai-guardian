@@ -175,11 +175,11 @@ inject_required_scripts() {
     local scripts_to_inject=""
     
     if ! echo "$content" | grep -q "thumbnail-capture.js"; then
-      scripts_to_inject="${scripts_to_inject}    <script src=\"https://images.gp.gebeya.io/dala-assets/thumbnail-capture.js\"></script>\n"
+      scripts_to_inject="${scripts_to_inject}    <script src=\"/thumbnail-capture.js\"></script>\n"
     fi
     
     if ! echo "$content" | grep -q "iframe-error-reporter.js"; then
-      scripts_to_inject="${scripts_to_inject}    <script src=\"https://images.gp.gebeya.io/dala-assets/iframe-error-reporter.js\"></script>\n"
+      scripts_to_inject="${scripts_to_inject}    <script src=\"/iframe-error-reporter.js\"></script>\n"
     fi
     
     # Try to inject before </body> tag, if it exists

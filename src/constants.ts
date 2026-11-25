@@ -11,9 +11,8 @@ export const BRAND = {
 export const STAFF_ROUTE = '#/staff-access'
 
 export const MEDIA = {
-  hero: 'https://dala-prod-public-storage.s3.eu-west-1.amazonaws.com/generated-images/31cde769-0ade-405b-85a2-e74ef9f35a95/scamshield-hero-2301e0aa-1795434838264.webp',
-  community:
-    'https://dala-prod-public-storage.s3.eu-west-1.amazonaws.com/generated-images/31cde769-0ade-405b-85a2-e74ef9f35a95/awareness-community-785e2d64-1795434834255.webp',
+  hero: '/scamshield-hero.webp',
+  community: '/awareness-community.webp',
 } as const
 
 export const COLORS = {
